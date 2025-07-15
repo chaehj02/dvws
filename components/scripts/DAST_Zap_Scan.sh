@@ -79,7 +79,7 @@ echo "[*] ZAP 데몬: zap.sh (포트 $zap_port)"
 
 echo "[*] 웹앱 컨테이너 실행"
 docker pull "$ECR_REPO:${DYNAMIC_IMAGE_TAG}"
-docker run -d --name "$containerName" -p "${port}:8080" "$ECR_REPO:${DYNAMIC_IMAGE_TAG}"
+docker run -d --name "$containerName" -p "${port}:80" "$ECR_REPO:${DYNAMIC_IMAGE_TAG}"
 sleep 3
 if ! docker ps | grep "$containerName" > /dev/null; then
     echo "❌ 컨테이너 시작 실패"

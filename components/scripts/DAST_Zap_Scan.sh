@@ -16,13 +16,26 @@ detect_internal_port() {
     local detected_port=""
     
     echo "[*] Docker 이미지 EXPOSE 포트 확인 중..."
+    echo "[DEBUG] 검사할 이미지: $image"
+    
+    # docker inspect 전체 정보 확인
+    echo "[DEBUG] Docker inspect 전체 Config 정보:"
+    docker inspect "$image" --format='{{json .Config}}' 2>/dev/null | jq . || echo "jq 없음"
     
     # docker inspect로 EXPOSE된 포트 확인
+    exposed_ports_raw=$(docker inspect "$image" --format='{{.Config.ExposedPorts}}' 2>/dev/null)
+    echo "[DEBUG] 원본 ExposedPorts: $exposed_ports_raw"
+    
     exposed_ports=$(docker inspect "$image" --format='{{range $port, $config := .Config.ExposedPorts}}{{$port}} {{end}}' 2>/dev/null | tr '/' ' ' | awk '{print $1}')
+    echo "[DEBUG] 파싱된 EXPOSE 포트들: '$exposed_ports'"
     
-    echo "[DEBUG] EXPOSE된 포트들: $exposed_ports"
+    # 다른 방법으로도 확인
+    exposed_ports_alt=$(docker inspect "$image" --format='{{json .Config.ExposedPorts}}' 2>/dev/null)
+    echo "[DEBUG] JSON 형태 ExposedPorts: $exposed_ports_alt"
     
-    if [ -n "$exposed_ports" ]; then
+    if [ -n "$exposed_ports" ] && [ "$exposed_ports" != " " ]; then
+        echo "[+] EXPOSE된 포트 발견됨: $exposed_ports"
+        
         # 일반적인 웹 포트 우선순위 적용 (80을 가장 높은 우선순위로)
         for preferred_port in 80 8080 3000 8000 9000 5000 4000 8090 8888 9090; do
             if echo "$exposed_ports" | grep -q "^$preferred_port$"; then
@@ -34,7 +47,7 @@ detect_internal_port() {
         
         # 우선순위 포트가 없으면 첫 번째 EXPOSE 포트 사용
         if [ -z "$detected_port" ]; then
-            detected_port=$(echo "$exposed_ports" | head -n1)
+            detected_port=$(echo "$exposed_ports" | awk '{print $1}')
             echo "[+] 첫 번째 EXPOSE 포트 사용: $detected_port"
         fi
         
@@ -42,11 +55,12 @@ detect_internal_port() {
         return 0
     else
         echo "[!] EXPOSE된 포트가 없습니다"
+        echo "[DEBUG] Dockerfile에 EXPOSE 명령어가 없거나 이미지 빌드 시 포함되지 않음"
     fi
     
     # 기본값 반환
-    echo "[!] 포트 감지 실패, 기본값 8080 사용"
-    echo "8080"
+    echo "[!] 포트 감지 실패, 기본값 80 사용 (일반적인 웹 애플리케이션 포트)"
+    echo "80"
     return 1
 }
 
@@ -116,8 +130,8 @@ docker pull "$ECR_REPO:${DYNAMIC_IMAGE_TAG}"
 # 내부 포트 감지
 internal_port=$(detect_internal_port "$ECR_REPO:${DYNAMIC_IMAGE_TAG}")
 if [ -z "$internal_port" ] || ! [[ "$internal_port" =~ ^[0-9]+$ ]]; then
-    echo "❌ 유효한 내부 포트를 감지하지 못했습니다. 기본값 8080 사용"
-    internal_port="8080"
+    echo "❌ 유효한 내부 포트를 감지하지 못했습니다. 기본값 80 사용"
+    internal_port="80"
 fi
 
 echo "[*] 웹앱 컨테이너: $containerName (외부 포트: $port → 내부 포트: $internal_port)"

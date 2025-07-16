@@ -24,16 +24,6 @@ get_exposed_port() {
         echo "80"
     fi
 }
-# 내부 포트 감지
-internal_port=$(get_exposed_port "$ECR_REPO:$IMAGE_TAG")
-
-# internal_port가 비어 있거나 숫자가 아닌 경우 기본값 지정
-if [ -z "$internal_port" ] || ! [[ "$internal_port" =~ ^[0-9]+$ ]]; then
-    echo "❗ 내부 포트 감지 실패 → 기본값 80 사용"
-    internal_port="80"
-else
-    echo "[INFO] 내부 포트 설정 완료: $internal_port"
-fi
 
 # ✅ 사용 가능한 외부 포트 탐색
 for try_port in {8081..8089}; do
@@ -64,12 +54,17 @@ cp "${ZAP_BIN_DIR}/plugin/"*.zap "$HOME/zap/zap_workdir_${zap_port}/plugin/"
 echo "[*] Docker 이미지 pull 중..."
 docker pull "$ECR_REPO:$IMAGE_TAG"
 
-# ✅ 내부 포트 감지 (EXPOSE 기반)
+# 내부 포트 감지
 internal_port=$(get_exposed_port "$ECR_REPO:$IMAGE_TAG")
-if [ -z "$internal_port" ]; then
-    echo "❗ EXPOSE 감지 실패. 기본값 80 사용"
+
+# internal_port가 비어 있거나 숫자가 아닌 경우 기본값 지정
+if [ -z "$internal_port" ] || ! [[ "$internal_port" =~ ^[0-9]+$ ]]; then
+    echo "❗ 내부 포트 감지 실패 → 기본값 80 사용"
     internal_port="80"
+else
+    echo "[INFO] 내부 포트 설정 완료: $internal_port"
 fi
+
 
 # ✅ docker run 실행 시 반드시 내부 포트를 포함하여 -p 옵션 사용
 echo "[*] 컨테이너 실행: $containerName (외부 $port → 내부 $internal_port)"

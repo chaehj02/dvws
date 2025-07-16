@@ -15,65 +15,42 @@ detect_internal_port() {
     local image="$1"
     local detected_port=""
     
-    echo "[FUNCTION] detect_internal_port 함수 시작" >&2
-    echo "[FUNCTION] 전달받은 이미지: '$image'" >&2
-    
     echo "[*] Docker 이미지 EXPOSE 포트 확인 중..." >&2
-    echo "[DEBUG] 검사할 이미지: $image" >&2
     
-    # 먼저 이미지가 실제로 존재하는지 확인
+    # 이미지 존재 확인
     if ! docker inspect "$image" > /dev/null 2>&1; then
         echo "[ERROR] 이미지를 찾을 수 없습니다: $image" >&2
         echo "80"
         return 1
     fi
     
-    echo "[DEBUG] 이미지 존재 확인됨" >&2
-    
-    # docker inspect 전체 정보 확인
-    echo "[DEBUG] Docker inspect 전체 Config 정보:" >&2
-    docker inspect "$image" --format='{{json .Config}}' 2>/dev/null >&2 || echo "[DEBUG] Config 정보 가져오기 실패" >&2
-    
-    # docker inspect로 EXPOSE된 포트 확인
-    exposed_ports_raw=$(docker inspect "$image" --format='{{.Config.ExposedPorts}}' 2>/dev/null)
-    echo "[DEBUG] 원본 ExposedPorts: '$exposed_ports_raw'" >&2
-    
+    # EXPOSE된 포트 확인
     exposed_ports=$(docker inspect "$image" --format='{{range $port, $config := .Config.ExposedPorts}}{{$port}} {{end}}' 2>/dev/null | tr '/' ' ' | awk '{print $1}')
-    echo "[DEBUG] 파싱된 EXPOSE 포트들: '$exposed_ports'" >&2
-    
-    # 다른 방법으로도 확인
-    exposed_ports_alt=$(docker inspect "$image" --format='{{json .Config.ExposedPorts}}' 2>/dev/null)
-    echo "[DEBUG] JSON 형태 ExposedPorts: '$exposed_ports_alt'" >&2
     
     if [ -n "$exposed_ports" ] && [ "$exposed_ports" != " " ] && [ "$exposed_ports" != "" ]; then
-        echo "[+] EXPOSE된 포트 발견됨: '$exposed_ports'" >&2
+        echo "[+] EXPOSE된 포트 발견: $exposed_ports" >&2
         
-        # 일반적인 웹 포트 우선순위 적용 (80을 가장 높은 우선순위로)
-        for preferred_port in 80 8080 3000 8000 9000 5000 4000 8090 8888 9090; do
+        # 웹 포트 우선순위 적용 (80을 가장 높은 우선순위로)
+        for preferred_port in 80 8080 3000 8000 9000 5000 4000; do
             if echo "$exposed_ports" | grep -q "^$preferred_port$"; then
                 detected_port="$preferred_port"
-                echo "[+] 우선순위 EXPOSE 포트 발견: $detected_port" >&2
+                echo "[+] 감지된 내부 포트: $detected_port" >&2
                 break
             fi
         done
         
-        # 우선순위 포트가 없으면 첫 번째 EXPOSE 포트 사용
+        # 우선순위 포트가 없으면 첫 번째 포트 사용
         if [ -z "$detected_port" ]; then
             detected_port=$(echo "$exposed_ports" | awk '{print $1}')
             echo "[+] 첫 번째 EXPOSE 포트 사용: $detected_port" >&2
         fi
         
-        echo "[FUNCTION] 함수 종료 - 반환값: $detected_port" >&2
         echo "$detected_port"
         return 0
     else
-        echo "[!] EXPOSE된 포트가 없습니다" >&2
-        echo "[DEBUG] Dockerfile에 EXPOSE 명령어가 없거나 이미지 빌드 시 포함되지 않음" >&2
+        echo "[!] EXPOSE된 포트가 없습니다. 기본값 80 사용" >&2
     fi
     
-    # 기본값 반환
-    echo "[!] 포트 감지 실패, 기본값 80 사용 (일반적인 웹 애플리케이션 포트)" >&2
-    echo "[FUNCTION] 함수 종료 - 반환값: 80" >&2
     echo "80"
     return 1
 }
@@ -141,13 +118,8 @@ cp "${ZAP_BIN_DIR}/plugin/"*.zap "$HOME/zap/zap_workdir_${zap_port}/plugin/"
 echo "[*] Docker 이미지 pull 중..."
 docker pull "$ECR_REPO:${DYNAMIC_IMAGE_TAG}"
 
-echo "[DEBUG] 포트 감지 함수 호출 시작..."
-echo "[DEBUG] 대상 이미지: $ECR_REPO:${DYNAMIC_IMAGE_TAG}"
-
 # 내부 포트 감지
 internal_port=$(detect_internal_port "$ECR_REPO:${DYNAMIC_IMAGE_TAG}")
-echo "[DEBUG] 함수 반환값: '$internal_port'"
-echo "[DEBUG] 포트 감지 함수 호출 완료"
 
 if [ -z "$internal_port" ] || ! [[ "$internal_port" =~ ^[0-9]+$ ]]; then
     echo "❌ 유효한 내부 포트를 감지하지 못했습니다. 기본값 80 사용"
